@@ -1,7 +1,6 @@
 package life;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Container;
 import java.awt.Graphics2D;
 import java.awt.Toolkit;
@@ -19,20 +18,22 @@ import javax.swing.JPanel;
 
 public class BufferDisplay extends Thread implements BufferChangeListener,
 		KeyListener {
-	public static final Color BACKGROUND = Color.BLACK;
-	public static final Color FOREGROUND = Color.GREEN;
-
+	private int size;
 	private JFrame frame;
 	private JPanel panel;
-	private int width;
-	private int height;
+	private int screenWidth;
+	private int screenHeight;
+	private int virtualWidth;
+	private int virtualHeight;
+	
 	private BlockingQueue<boolean[][]> bufferQueue = new LinkedBlockingQueue<boolean[][]>(
-			100);
+			1000);
 	private Map<ShutdownListener, ShutdownListener> shutdownListeners = new ConcurrentHashMap<ShutdownListener, ShutdownListener>();
 
 	private boolean[][] pixelBuffer;
 
-	public BufferDisplay(String name) {
+	public BufferDisplay(String name, int size) {
+		this.size = size;
 		frame = new JFrame(name);
 		frame.setUndecorated(true);
 		frame.setVisible(true);
@@ -40,10 +41,13 @@ public class BufferDisplay extends Thread implements BufferChangeListener,
 
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-		width = Configuration.getWidth();
-		height = Configuration.getHeight();
+		virtualWidth = Configuration.getWidth();
+		virtualHeight = Configuration.getHeight();
+		
+		screenWidth = virtualWidth * size;
+		screenHeight = virtualHeight * size;
 
-		frame.setSize(width, height);
+		frame.setSize(screenWidth, screenHeight);
 		panel = new JPanel();
 		// panel = new JPanel();
 		Container contentPane = frame.getContentPane();
@@ -56,7 +60,7 @@ public class BufferDisplay extends Thread implements BufferChangeListener,
 
 	public void bufferChanged(boolean[][] pixelBuffer) {
 		try {
-			while (!bufferQueue.offer(pixelBuffer, 100L, TimeUnit.MILLISECONDS));
+			while (!bufferQueue.offer(pixelBuffer, 10L, TimeUnit.MILLISECONDS));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -81,14 +85,14 @@ public class BufferDisplay extends Thread implements BufferChangeListener,
 			clear(graphics);
 
 			if (pixelBuffer != null) {
-				int actualWidth = getActualWidth();
-				int actualHeight = getActualHeight();
+				int virtualWidth = getVirtualWidth();
+				int virtualHeight = getVirtualHeight();
 
-				if (actualWidth > 0 && actualHeight > 0) {
-					for (int i = 0; i < actualWidth; ++i) {
-						for (int j = 0; j < actualHeight; ++j) {
+				if (virtualWidth > 0 && virtualHeight > 0) {
+					for (int i = 0; i < virtualWidth; ++i) {
+						for (int j = 0; j < virtualHeight; ++j) {
 							if (pixelBuffer[i][j]) {
-								graphics.drawRect(i, j, 1, 1);
+								graphics.fillRect(i * size, j * size, size, size);
 							}
 						}
 					}
@@ -100,31 +104,39 @@ public class BufferDisplay extends Thread implements BufferChangeListener,
 			Toolkit.getDefaultToolkit().sync();
 		}
 	}
-
-	private int getActualWidth() {
+	
+	private int getVirtualWidth() {
 		if (pixelBuffer == null) {
 			return 0;
-		} else if (width < pixelBuffer.length) {
-			return width;
+		} else if (virtualWidth < pixelBuffer.length) {
+			return virtualWidth;
 		} else {
 			return pixelBuffer.length;
 		}
 	}
-
-	private int getActualHeight() {
+	
+	private int getVirtualHeight() {
 		if (pixelBuffer == null || pixelBuffer.length == 0) {
 			return 0;
-		} else if (height < pixelBuffer[0].length) {
-			return height;
+		} else if (virtualHeight < pixelBuffer[0].length) {
+			return virtualHeight;
 		} else {
 			return pixelBuffer[0].length;
 		}
 	}
 
+	private int getScreenWidth() {
+		return getVirtualWidth() * size;
+	}
+
+	private int getScreenHeight() {
+		return getVirtualHeight() * size;
+	}
+
 	private void clear(Graphics2D graphics) {
-		graphics.setColor(BACKGROUND);
-		graphics.fillRect(0, 0, width, height);
-		graphics.setColor(FOREGROUND);
+		graphics.setColor(Configuration.BACKGROUND_COLOR);
+		graphics.fillRect(0, 0, screenWidth, screenHeight);
+		graphics.setColor(Configuration.getForegroundColor());
 	}
 
 	public void addShutdownListener(ShutdownListener shutdownListener) {
@@ -155,10 +167,10 @@ public class BufferDisplay extends Thread implements BufferChangeListener,
 	}
 
 	public int getWidth() {
-		return width;
+		return virtualWidth;
 	}
 
 	public int getHeight() {
-		return height;
+		return virtualHeight;
 	}
 }
